@@ -131,11 +131,11 @@ def main():
     plot.plot_time_series(preds, test_df, LABEL, TIMESTAMP_COL, args.model, args.bucket)
 
     # 特征重要性
-    if args.model in ["rf", "gbtr"]:
+    if args.model in ["rf", "gbrt"]:
         plot.plot_feature_importances(final_model.stages[-1], numeric_features, args.model, args.bucket)
 
     # Loss curve
-    if args.model in ["gbtr", "lr"]:
+    if args.model in ["gbrt", "elastic"]:
         plot.plot_loss_curve(final_model.stages[-1], args.model, args.bucket)
 
 
