@@ -1,0 +1,71 @@
+#!/bin/bash
+# 用法:
+# chmod +x submit_main.sh
+# ./submit_main.sh rf   # 训练 RandomForest
+# ./submit_main.sh gbrt # 训练 GBT
+
+set -e
+
+# ---------------------------
+# 配置
+# ---------------------------
+MODEL="$1"  # 第一个参数，rf 或 gbrt
+if [[ -z "$MODEL" ]]; then
+  echo "Usage: $0 <rf|gbrt>"
+  exit 1
+fi
+
+CLUSTER_NAME="my-cluster"
+REGION="asia-southeast1"
+BUCKET1="weather-2024"
+BUCKET2="spark-result"
+SCRIPT_PATH="gs://$BUCKET1/scripts/main.py"
+LOG_PATH="gs://$BUCKET2/logs/main_${MODEL}.log"
+
+TRAINSET_PATH="gs://$BUCKET2/train_withds"
+TESTSET_PATH="gs://$BUCKET2/test_withds"
+
+NUM_WORKERS=2
+MASTER_DISK=100
+WORKER_DISK=100
+
+# ---------------------------
+# 创建 Dataproc 集群
+# ---------------------------
+gcloud dataproc clusters create $CLUSTER_NAME \
+  --region=$REGION \
+  --num-workers=$NUM_WORKERS \
+  --worker-machine-type=n2-standard-4 \
+  --master-machine-type=n2-standard-4 \
+  --master-boot-disk-size=$MASTER_DISK \
+  --worker-boot-disk-size=$WORKER_DISK \
+  --image-version="2.2-debian12" \
+  --optional-components=JUPYTER \
+  --enable-component-gateway
+
+# ---------------------------
+# 提交 PySpark 任务
+# ---------------------------
+gcloud dataproc jobs submit pyspark "$SCRIPT_PATH" \
+  --cluster=$CLUSTER_NAME \
+  --region=$REGION \
+  --py-files="src/" \
+  --jars="gs://hadoop-lib/gcs/gcs-connector-latest-hadoop3.jar" \
+  -- \
+  --model $MODEL \
+  --train-path $TRAINSET_PATH \
+  --test-path $TESTSET_PATH \
+  --num-folds 4 \
+  > >(tee /tmp/job_${MODEL}.log) 2>&1
+
+# ---------------------------
+# 上传日志
+# ---------------------------
+gsutil cp /tmp/job_${MODEL}.log "$LOG_PATH"
+echo "Logs saved to: $LOG_PATH"
+
+# ---------------------------
+# 删除集群
+# ---------------------------
+gcloud dataproc clusters delete $CLUSTER_NAME --region=$REGION --quiet
+echo "✅ Cluster deleted."

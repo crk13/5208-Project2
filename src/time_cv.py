@@ -1,12 +1,6 @@
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
-def chronological_split(df, timestamp_col, train_ratio=0.7):
-    df = df.withColumn("ts_long", F.col(timestamp_col).cast("long"))
-    cutoff = df.approxQuantile("ts_long", [train_ratio], 0.0)[0]
-    train = df.filter(F.col("ts_long") <= cutoff)
-    test  = df.filter(F.col("ts_long") > cutoff)
-    return train.drop("ts_long"), test.drop("ts_long")
 
 def prefix_folds(train_df, timestamp_col, num_folds=4):
     """
