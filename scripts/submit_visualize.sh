@@ -1,13 +1,17 @@
 set -e
 
+
 CLUSTER_NAME="my-cluster"
+REGION="asia-southeast1"
+
+
 NUM_WORKERS=2
 MASTER_DISK=100
 WORKER_DISK=100
 
 
 gcloud dataproc clusters create $CLUSTER_NAME \
-  --region=asia-southeast1 \
+  --region=$REGION \
   --num-workers=$NUM_WORKERS \
   --worker-machine-type=n2-standard-4 \
   --master-machine-type=n2-standard-4 \
@@ -17,21 +21,20 @@ gcloud dataproc clusters create $CLUSTER_NAME \
   --optional-components=JUPYTER \
   --enable-component-gateway \
 
+zip -r src.zip ./src
+
 gcloud dataproc jobs submit pyspark \
     test/visualize.py \
-    --cluster=mycluster \
+    --cluster=my-cluster \
     --region=asia-southeast1 \
-    --py-files="src/" \
+    --py-files=src.zip \
     -- \
-    --train-path="gs://spark-result/train_withds1/" \
-    --test-path="gs://spark-result/test_withds1/" \
+    --train-path="gs://spark-result/train_withds/" \
+    --test-path="gs://spark-result/test_withds/" \
     --sample-fraction=0.01 \
     --num-folds=4 \
     --bucket="spark-result"
 
-gsutil cp /tmp/job_${MODEL}.log "$LOG_PATH"
-echo "Logs saved to: $LOG_PATH"
 
-
-gcloud dataproc clusters delete $CLUSTER_NAME --region=$REGION --quiet
+gcloud dataproc clusters delete $CLUSTER_NAME --region=asia-southeast1 --quiet
 echo "✅ Cluster deleted."

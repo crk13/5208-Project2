@@ -1,5 +1,5 @@
 from pyspark.ml import Pipeline
-from pyspark.ml.evaluation import Evaluator
+from pyspark.ml.evaluation import Evaluator, RegressionEvaluator
 from pyspark.sql import DataFrame
 import matplotlib.pyplot as plt
 from google.cloud import storage

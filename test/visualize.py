@@ -40,12 +40,13 @@ def main():
     test_df = test_df.withColumn("ELEVATION", test_df["ELEVATION"].cast(DoubleType()))
 
     train_sample = train_df.sample(fraction=args.sample_fraction, seed=42)
+    print("Sampled rows:", train_sample.count())
     train_sample = train_sample.orderBy(TIMESTAMP_COL).cache()
     folds = prefix_folds(train_sample, TIMESTAMP_COL, num_folds=args.num_folds)
     evaluator = RegressionEvaluator(labelCol=LABEL, predictionCol="prediction", metricName="rmse")
 
 
-    assembler = VectorAssembler(inputCols=numeric_features, outputCol="features_raw")
+    assembler = VectorAssembler(inputCols=NUMERIC_FEATURES, outputCol="features_raw")
     scaler = MinMaxScaler(inputCol="features_raw", outputCol="features")
     # scaler = StandardScaler(inputCol="features_raw", outputCol="features", withMean=True, withStd=True)
     base_stages = [assembler, scaler]
@@ -76,6 +77,7 @@ def main():
         for param_name, param_values in param_grids[model_name].items():
             x, y = single_param_scan(folds, base_stages, estimator_builder, param_name, param_values)
             plot_and_upload(x, y, param_name, model_name, bucket_name=args.bucket)
+            print("Using param:", param_name, "with values:", param_values)
 
 
 
