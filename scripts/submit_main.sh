@@ -19,7 +19,6 @@ CLUSTER_NAME="my-cluster"
 REGION="asia-southeast1"
 BUCKET1="weather-2024"
 BUCKET2="spark-result"
-SCRIPT_PATH="gs://$BUCKET1/scripts/main.py"
 LOG_PATH="gs://$BUCKET2/logs/main_${MODEL}.log"
 
 TRAINSET_PATH="gs://$BUCKET2/train_withds"

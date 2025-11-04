@@ -1,8 +1,8 @@
 set -e
 
 
-CLUSTER_NAME="my-cluster"
-REGION="asia-southeast1"
+# CLUSTER_NAME="my-cluster"
+# REGION="asia-southeast1"
 
 
 # NUM_WORKERS=2
@@ -19,21 +19,21 @@ REGION="asia-southeast1"
 #   --worker-boot-disk-size=$WORKER_DISK \
 #   --image-version="2.2-debian12" \
 #   --optional-components=JUPYTER \
-#   --enable-component-gateway \
+#   --enable-component-gateway
 
 zip -r src.zip ./src
 
-gcloud dataproc jobs submit pyspark \
-    test/visualize.py \
+gcloud dataproc jobs submit pyspark test/visualize.py \
+    --cluster=my-cluster \
     --cluster=my-cluster \
     --region=asia-southeast1 \
     --py-files=src.zip \
     -- \
-    --train-path="gs://spark-result/train_withds/" \
-    --test-path="gs://spark-result/test_withds/" \
+    --train-path="gs://spark-resultt/train_withds/" \
+    --test-path="gs://spark-resultt/test_withds/" \
     --sample-fraction=0.001 \
     --num-folds=4 \
-    --bucket="spark-result"
+    --bucket="spark-resultt"
 
 
 gcloud dataproc clusters delete $CLUSTER_NAME --region=asia-southeast1 --quiet

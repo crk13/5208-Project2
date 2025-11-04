@@ -6,10 +6,11 @@ from pyspark.ml.feature import VectorAssembler, MinMaxScaler
 from pyspark.ml.regression import RandomForestRegressor, GBTRegressor
 from pyspark.ml.evaluation import RegressionEvaluator
 
-import sys, os
+import sys, os, time
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.time_cv import prefix_folds
 from src.model_selection import grid_search_prefix_cv
+from src import plot
 
 numeric_features = [
         "dt_min", "ELEVATION", "DEW", "VIS", "CIG", "SLP", "WND_Speed",
@@ -67,22 +68,65 @@ def main():
             {"numTrees":200, "maxDepth":12, "subsamplingRate":0.9, "featureSubsetStrategy":"auto", "minInstancesPerNode":5},
         ]
         estimator_builder = lambda **p: RandomForestRegressor(labelCol=LABEL, featuresCol="features", seed=42, **p)
-    else:
+    elif args.model == "gbtr":
         param_grid = [
             {"maxDepth":5, "maxIter":80, "stepSize":0.1, "maxBins":32, "subsamplingRate":1.0, "minInstancesPerNode":5},
             {"maxDepth":7, "maxIter":120, "stepSize":0.1, "maxBins":64, "subsamplingRate":0.8, "minInstancesPerNode":5},
         ]
         estimator_builder = lambda **p: GBTRegressor(labelCol=LABEL, featuresCol="features", seed=42, **p)
+    elif args.model == "lr":
+        param_grid = [
+            {"regParam": 0.01, "elasticNetParam": 0.0, "maxIter": 200},
+            {"regParam": 0.1,  "elasticNetParam": 0.5, "maxIter": 200},
+            {"regParam": 0.2,  "elasticNetParam": 0.9, "maxIter": 300},
+        ]
+        estimator_builder = lambda **p: LinearRegression(
+            labelCol=LABEL,
+            featuresCol="features",
+            solver="auto",
+            standardization=False,
+            fitIntercept=True,
+            **p,
+        )
+
 
     best_params, grid_results = grid_search_prefix_cv(folds, base_stages, estimator_builder, param_grid, evaluator)
+    spark.createDataFrame(
+        [(str(params), score) for params, score in grid_results],
+        ["params", "avg_rmse"],
+    ).show(truncate=False)
+
     final_pipeline = Pipeline(stages=base_stages + [estimator_builder(**best_params)])
+    # 训练前记录时间
+    start_time = time.time()
     final_model = final_pipeline.fit(train_df)
+    end_time = time.time()
+    print(f"Training time: {end_time - start_time:.2f} seconds")
+
     preds = final_model.transform(test_df)
 
     test_rmse = evaluator_rmse.evaluate(preds)
     test_mae  = evaluator_mae.evaluate(preds)
     test_r2   = evaluator_r2.evaluate(preds)
     print(f"Test RMSE: {test_rmse:.4f}, MAE: {test_mae:.4f}, R2: {test_r2:.4f}")
+
+
+    # 残差图
+    plot.plot_residuals(preds, LABEL, args.model, bucket_name)
+
+    # 散点图
+    plot.plot_pred_vs_actual(preds, LABEL, args.model, bucket_name)
+
+    # 时间序列图
+    plot.plot_time_series(preds, test_df, LABEL, TIMESTAMP_COL, args.model, bucket_name)
+
+    # 特征重要性
+    if args.model in ["rf", "gbtr"]:
+        plot.plot_feature_importances(final_model.stages[-1], numeric_features, args.model, bucket_name)
+
+    # Loss curve
+    if args.model in ["gbtr", "lr"]:
+        plot.plot_loss_curve(final_model.stages[-1], args.model, bucket_name)
 
     from google.cloud import storage
     import os
