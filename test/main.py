@@ -9,8 +9,15 @@ from pyspark.ml.evaluation import RegressionEvaluator
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.time_cv import prefix_folds
-from src.utils import grid_search_prefix_cv
+from src.model_selection import grid_search_prefix_cv
 
+numeric_features = [
+        "dt_min", "ELEVATION", "DEW", "VIS", "CIG", "SLP", "WND_Speed",
+        "TMP_lag1", "time_speed", "time_a", "WND_sin", "WND_cos",
+        "month_sin", "month_cos", "day_sin", "day_cos",
+        "hour_sin", "hour_cos", "minute_sin", "minute_cos",
+        "lat_sin", "lat_cos", "lon_sin", "lon_cos"
+    ]
 LABEL = "TMP"
 TIMESTAMP_COL = "DATE_TS"
 
@@ -28,23 +35,17 @@ def main():
     train_df = train_df.withColumn("ELEVATION", train_df["ELEVATION"].cast(DoubleType()))
     test_df = spark.read.parquet(args.test_path).drop("STATION") 
     test_df = test_df.withColumn("ELEVATION", test_df["ELEVATION"].cast(DoubleType())) 
-    numeric_features = [
-        "dt_min", "ELEVATION", "DEW", "VIS", "CIG", "SLP", "WND_Speed",
-        "TMP_lag1", "time_speed", "time_a", "WND_sin", "WND_cos",
-        "month_sin", "month_cos", "day_sin", "day_cos",
-        "hour_sin", "hour_cos", "minute_sin", "minute_cos",
-        "lat_sin", "lat_cos", "lon_sin", "lon_cos"
-    ]
+
+    train_sample = train_df.sample(fraction=args.sample_fraction, seed=42)
+    train_sample = train_sample.orderBy(TIMESTAMP_COL).cache()
+    folds = prefix_folds(train_sample, TIMESTAMP_COL, num_folds=args.num_folds)
+    evaluator = RegressionEvaluator(labelCol=LABEL, predictionCol="prediction", metricName="rmse")
+
 
     assembler = VectorAssembler(inputCols=numeric_features, outputCol="features_raw")
     scaler = MinMaxScaler(inputCol="features_raw", outputCol="features")
     # scaler = StandardScaler(inputCol="features_raw", outputCol="features", withMean=True, withStd=True)
     base_stages = [assembler, scaler]
-
-
-    train_df = train_df.orderBy(TIMESTAMP_COL).cache()
-    folds = prefix_folds(train_df, TIMESTAMP_COL, num_folds=args.num_folds)
-    evaluator = RegressionEvaluator(labelCol=LABEL, predictionCol="prediction", metricName="rmse")
 
     if args.model == "rf":
         param_grid = [

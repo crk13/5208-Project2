@@ -1,50 +1,44 @@
-from typing import Callable, Dict, Iterable, List, Tuple
-
 from pyspark.ml import Pipeline
 from pyspark.ml.evaluation import Evaluator
 from pyspark.sql import DataFrame
+import matplotlib.pyplot as plt
+from google.cloud import storage
 
 
-def grid_search_prefix_cv(
-    folds: Iterable[Tuple[DataFrame, DataFrame]],
-    base_stages: List,
-    estimator_builder: Callable[..., object],
-    param_grid: List[Dict],
-    evaluator: Evaluator,
-    metric_name: str = "rmse",
-) -> Tuple[Dict, List[Tuple[Dict, float]]]:
-    """
-    Evaluate a list of hyper-parameter dictionaries using prefix CV folds.
+def single_param_scan(folds, base_stages, estimator_builder, param_name, param_values, label="TMP"):
+    evaluator = RegressionEvaluator(labelCol=label, predictionCol="prediction", metricName="rmse")
+    avg_rmses = []
 
-    Returns the best parameter set (lowest metric) and a list of all results.
-    """
-    results = []
-
-    for params in param_grid:
-        pipeline = Pipeline(stages=base_stages + [estimator_builder(**params)])
-
+    for val in param_values:
         fold_scores = []
-        for fold_idx, (fold_train, fold_val) in enumerate(folds, 1):
+        for fold_train, fold_val in folds:
             if fold_train.rdd.isEmpty() or fold_val.rdd.isEmpty():
                 continue
-
+            pipeline = Pipeline(stages=base_stages + [estimator_builder(**{param_name: val})])
             model = pipeline.fit(fold_train)
             preds = model.transform(fold_val)
-            score = evaluator.evaluate(preds)
-            fold_scores.append(score)
-            print(f"Params {params} | Fold {fold_idx} {metric_name}: {score:.4f}")
+            fold_scores.append(evaluator.evaluate(preds))
+        avg_rmse = sum(fold_scores) / len(fold_scores)
+        avg_rmses.append(avg_rmse)
+        print(f"{param_name}={val}, avg RMSE={avg_rmse:.4f}")
 
-        if fold_scores:
-            avg_score = sum(fold_scores) / len(fold_scores)
-            results.append((params, avg_score))
-            print(f"Params {params} | Avg {metric_name}: {avg_score:.4f}")
-        else:
-            print(f"Params {params} skipped (no valid folds).")
+    return param_values, avg_rmses
 
-    if not results:
-        raise ValueError("No valid folds were evaluated. Check data splits.")
+def plot_and_upload(param_values, avg_rmses, param_name, model_name, bucket_name, local_path=None):
+    plt.figure(figsize=(6,4))
+    plt.plot(param_values, avg_rmses, marker='o')
+    plt.xlabel(param_name)
+    plt.ylabel("Average RMSE")
+    plt.title(f"{model_name} - Effect of {param_name}")
+    plt.grid(True)
+    
+    local_path = local_path or f"{model_name}_{param_name}.png"
+    plt.savefig(local_path)
+    plt.close()
 
-    results.sort(key=lambda x: x[1])  # lower is better
-    best_params = results[0][0]
-    print(f"Best params: {best_params} with {metric_name}: {results[0][1]:.4f}")
-    return best_params, results
+    # 上传到 GCS
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(f"plots/{model_name}_{param_name}.png")
+    blob.upload_from_filename(local_path)
+    print(f"Uploaded {local_path} to gs://{bucket_name}/plots/")

@@ -58,14 +58,9 @@ gcloud dataproc jobs submit pyspark "$SCRIPT_PATH" \
   --num-folds 4 \
   > >(tee /tmp/job_${MODEL}.log) 2>&1
 
-# ---------------------------
-# 上传日志
-# ---------------------------
 gsutil cp /tmp/job_${MODEL}.log "$LOG_PATH"
 echo "Logs saved to: $LOG_PATH"
 
-# ---------------------------
-# 删除集群
-# ---------------------------
+
 gcloud dataproc clusters delete $CLUSTER_NAME --region=$REGION --quiet
 echo "✅ Cluster deleted."
