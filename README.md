@@ -1,123 +1,123 @@
-# Weather Forecasting with PySpark
+# Weather Forecasting on Dataproc
 
-End-to-end workflow for training and evaluating weather temperature forecasting models on Spark.  
-The project builds feature pipelines, performs time-aware cross-validation, trains multiple regressors (Random Forest, Gradient-Boosted Trees, Elastic Net), and submits Dataproc jobs that stream results and plots back to Google Cloud Storage (GCS).
+PySpark pipeline for cleaning NOAA ISD observations, engineering features, training regressors, and exporting diagnostics to Google Cloud Storage (GCS). Jobs can run locally or on a Dataproc cluster.
 
-## Repository Layout
-- `src/` &nbsp;Reusable Spark pipeline utilities (feature assembly, cross-validation, plotting helpers).
-- `scripts/` &nbsp;Command-line utilities for data extraction, feature engineering, and Dataproc submission (`submit_main.sh`, `submit_visualize.sh`).
-- `test/` &nbsp;Entry points executed on Dataproc (`main.py` for training, `visualize.py` for parameter scans, `main_gpu.py` experimental).
-- `models/` *(created at runtime)* &nbsp;Persisted Spark pipelines; mirrored to GCS.
+## Directory Map
 
-## Prerequisites
-- Python 3.10+ with `pyspark`, `google-cloud-storage`, `matplotlib`, `pandas`.
-- Google Cloud CLI (`gcloud`) and `gsutil`.
-- Access to a GCS bucket containing the processed parquet datasets (defaults assume `gs://spark-result-lyx`).
-- A Dataproc cluster (or permissions to create one) in `asia-southeast1`.
+| Path | Purpose |
+|------|---------|
+| `src/` | Library code for reusable components. `time_cv.py` builds chronological folds, `model_selection.py` runs grid search, `plot.py` centralises plotting and GCS upload helpers. |
+| `scripts/` | Stand-alone scripts for data ingestion, feature engineering, and Dataproc submission (see next section for details). |
+| `test/` | PySpark entrypoints executed directly or through Dataproc submissions (`main.py`, `plot_result.py`, `visualize.py`, experimental `main_gpu.py`). |
+| `notebooks/` | Documentation notebooks demonstrating cleaning and training workflows. |
+| `figures/` *(created locally)* | Downloaded charts when copying from GCS. |
+| `models/` *(created at runtime)* | Saved Spark pipelines; mirrored to `gs://<bucket>/models/<model>_model/`. |
 
-Install Python packages locally:
+## Script Reference (`scripts/`)
+
+| Script | Summary |
+|--------|---------|
+| `extract.py`, `test/extract.py` | Stream `.tar.gz` archives from GCS, extract CSV members on the fly, and push them back to the destination bucket without persisting to disk. |
+| `data_processing.py` | Production cleaning workflow: station filtering, anomaly removal, interpolation, periodic features, and chronological train/test split. |
+| `data_processing_part1.py` | Exploratory processing stage that produces histogram plots and uploads them to GCS. |
+| `data_processing_new.py`, `test/data_processing_new.py` | Iterative cleaning scripts used for experiments and debugging smaller subsets. |
+| `time_cv.py` | Chronological splitter utilities reused by training scripts. |
+| `features.py` | Detects numeric feature columns while excluding label/timestamp fields. |
+| `submit_main.sh` | Packages `src/` into `src.zip`, submits `test/main.py` (supports `rf`, `gbrt`, `elastic`), copies logs to `gs://<bucket>/logs/`, uploads `models/<model>_model/`, and deletes the cluster at the end (comment out the delete command to keep the cluster). |
+| `submit_plotresult.sh` | Submits `test/plot_result.py` for a fixed best-parameter run that regenerates metrics and figures. Logs go to `gs://<bucket>/logs/`; enable model upload by ensuring the job writes `models/<model>_model/`. |
+| `submit_visualize.sh` | Runs `test/visualize.py` to sweep single hyperparameters and upload comparison plots. |
+
+All submission scripts default to cluster `my-cluster`, region `asia-southeast1`, and bucket `spark-result-lyx`. Adjust the variables at the top of each script if your environment differs.
+
+## Entry Points (`test/`)
+
+| File | Role |
+|------|------|
+| `main.py` | Main training driver. Performs sub-sampling, prefix cross-validation, prints RMSE/MAE/R², logs Elastic Net coefficients, saves the pipeline locally, and mirrors artifacts to GCS. |
+| `plot_result.py` | Executes a single model configuration, reports Train/Test RMSE, MAE, R², MAPE, prints residual summaries, and generates plots (residuals, scatter, time series, loss curves). Used by `submit_plotresult.sh`. |
+| `visualize.py` | One-parameter sweep for GBRT and Elastic Net; produces charts that land in `gs://<bucket>/figures/`. |
+| `main_gpu.py` | Minimal driver for GPU or reduced-feature experiments. |
+
+## Plotting Outputs
+
+`src/plot.py` saves each figure locally (e.g., `elastic_residuals.png`) before uploading to `gs://<bucket>/figures/`. Residual statistics (describe + 95/99/99.9 percentiles) are printed to the job log to highlight outliers. Feature-importance charts rotate x-labels 45° for readability.
+
+## Notebooks
+
+- `notebooks/data_processing_demo.ipynb` – step-by-step cleaning walkthrough mirroring the production scripts.
+- `notebooks/train_framework.ipynb` – explains prefix CV/grid search helpers and compares model metrics.
+- `notebooks/plot_elastic_param.ipynb` – coefficient visualisations saved into `figures/`.
+
+Use notebooks for analysis; scripted runs should use the corresponding files in `scripts/` and `test/`.
+
+## Environment Setup
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install pyspark google-cloud-storage pandas matplotlib
+pip install pyspark google-cloud-storage pandas matplotlib seaborn
+gcloud auth login
+gcloud config set project <your-project-id>
 ```
 
-## Data Locations
-Default paths are managed in `scripts/common.py`:
-
-```
-TRAIN_DATA_PATH=gs://spark-result-lyx/train_withds
-TEST_DATA_PATH=gs://spark-result-lyx/test_withds
-```
-
-Override them via environment variables when running locally:
-
-```bash
-export TRAIN_DATA_PATH=gs://my-bucket/train
-export TEST_DATA_PATH=gs://my-bucket/test
-```
-
-or pass explicit `--train-path / --test-path` flags to the entry script.
+Ensure the Dataproc service account has `storage.objects.get` and `storage.objects.create` on the target bucket.
 
 ## Running Locally
-The local runner mirrors the Dataproc job but uses your active PySpark installation:
 
 ```bash
 python test/main.py \
   --model elastic \
-  --train-path gs://my-bucket/train_withds \
-  --test-path gs://my-bucket/test_withds \
+  --train-path gs://spark-result-lyx/train_withds \
+  --test-path gs://spark-result-lyx/test_withds \
   --sample-fraction 0.001 \
   --num-folds 4 \
-  --bucket my-bucket
+  --bucket spark-result-lyx
 ```
 
-Outputs:
-- Metrics logged to stdout (RMSE, MAE, R²).
-- Diagnostic plots uploaded to `gs://<bucket>/plots/<model>/`.
-- Trained pipeline stored under `models/<model>_model/` locally and mirrored to `gs://<bucket>/models/<model>_model/`.
+Artifacts appear under `models/<model>_model/` and `gs://<bucket>/figures/`. Increase `--sample-fraction` cautiously if memory allows.
 
-## Submitting to Dataproc
+## Running on Dataproc
 
-1. **Create (or reuse) a cluster** – the helper script has the command commented near the top:
+1. (Optional) create a cluster:
+   ```bash
+   gcloud dataproc clusters create my-cluster \
+     --region=asia-southeast1 \
+     --num-workers=2 \
+     --worker-machine-type=n2-standard-4 \
+     --master-machine-type=n2-standard-4 \
+     --image-version=2.2-debian12
+   ```
+2. Submit the training job:
+   ```bash
+   chmod +x scripts/submit_main.sh
+   ./scripts/submit_main.sh elastic
+   ```
+3. Regenerate plots/metrics only:
+   ```bash
+   chmod +x scripts/submit_plotresult.sh
+   ./scripts/submit_plotresult.sh elastic
+   ```
 
-```bash
-gcloud dataproc clusters create my-cluster \
-  --region=asia-southeast1 \
-  --num-workers=2 \
-  --worker-machine-type=n2-standard-4 \
-  --master-machine-type=n2-standard-4 \
-  --image-version=2.2-debian12 \
-  --optional-components=JUPYTER \
-  --enable-component-gateway
-```
+Logs are written to `/tmp/job_<model>.log` and copied to `gs://<bucket>/logs/main_<model>.log`. Plots land in `gs://<bucket>/figures/`; trained pipelines save to both the local `models/` directory and `gs://<bucket>/models/<model>_model/`.
 
-2. **Run the training job** for Random Forest (`rf`), Gradient-Boosted Trees (`gbrt`), or Elastic Net (`elastic`):
+## Customising Hyperparameters
 
-```bash
-chmod +x scripts/submit_main.sh
-./scripts/submit_main.sh elastic
-```
-
-The script:
-- Packages `src/` into `src.zip`.
-- Submits `test/main.py` as a PySpark job.
-- Streams logs to `/tmp/job_<model>.log` and copies them to `gs://spark-result-lyx/logs/`.
-- Uploads the trained pipeline artifacts to `gs://spark-result-lyx/models/<model>_model/`.
-- Deletes the cluster at the end (remove the command if you plan to keep the cluster running).
-
-Use `scripts/submit_visualize.sh` to run parameter scans and push plots to the bucket.
-
-## Key Components
-
-- **Feature Engineering** (`scripts/features.py`, `scripts/data_processing*.py`): transforms raw weather observations into time-aware sin/cos features, lag variables, and normalization-ready columns.
-- **Time-aware Cross-Validation** (`src/time_cv.py`): builds prefix-based folds that respect chronological order.
-- **Model Selection** (`src/model_selection.py`): implements grid search with prefix folds, collecting average RMSE per parameter set.
-- **Visualization** (`src/plot.py`, `test/visualize.py`): residuals, prediction vs. actual, time series comparisons, and parameter effect plots saved to GCS.
-
-## Customising Parameter Grids
-`test/main.py` contains the search grids for each model type. Adjust the `param_grid` dictionaries to probe additional hyper-parameters (e.g., deeper GBRT trees, finer Elastic Net regularization). The results table printed after cross-validation summarizes average RMSE for each candidate.
+- Update the `param_grid` dictionaries in `test/main.py` for grid search.
+- Adjust the fixed parameter dictionary in `test/plot_result.py` when you want `submit_plotresult.sh` to test new settings.
+- `test/visualize.py` contains sweep ranges for quick sensitivity analysis.
 
 ## Troubleshooting
-- `ModuleNotFoundError: No module named 'pyspark'` → install PySpark in the active environment (`pip install pyspark`).
-- `NOT_FOUND: Cluster ...` → create the Dataproc cluster or update the cluster name in `scripts/submit_main.sh`.
-- Rate limit messages while writing to `dataproc-temp-*` → informational; Dataproc flushes logs once the job finishes.
 
-## Cleaning Up
-Remove temporary job artifacts to avoid extra storage costs:
+- `403 Forbidden` when reading parquet → grant the Dataproc service account `storage.objects.get` on the bucket or update the bucket name in the submission script.  
+- `CommandException: No URLs matched: models/<model>_model` → ensure the job saved a pipeline locally (see the save block near the end of `test/main.py` or re-enable it in `test/plot_result.py`).  
+- Residual plot spans ±20 despite low RMSE → inspect the printed percentiles to confirm only a few outliers drive the spikes.
+
+## Cleanup
 
 ```bash
 rm -rf src.zip models/
 gsutil rm -r gs://spark-result-lyx/logs/
-```
-
-Delete Dataproc clusters when idle:
-
-```bash
 gcloud dataproc clusters delete my-cluster --region=asia-southeast1
 ```
 
----
-
-This README captures the current workflow; keep bucket names, regions, and parameter grids in sync with your team’s environment as needed.
+Keep bucket names, regions, and cluster settings in sync with your project. Update this README as new scripts or workflows are added.
