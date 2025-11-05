@@ -69,11 +69,11 @@ def main():
         }
         estimator_builder = GPU_GBT(labelCol=LABEL, featuresCol="features", **best_params)
 
-    elif args.model == "lr":
+    elif args.model == "elastic":
         best_params = {
-            "regParam": 0.1,
-            "elasticNetParam": 0.5,
-            "maxIter": 200,
+            "regParam": 0.00025,
+            "elasticNetParam": 0.1,
+            "maxIter": 300,
         }
         estimator_builder = GPU_LR(labelCol=LABEL, featuresCol="features", **best_params)
 
@@ -84,20 +84,30 @@ def main():
     start_time = time.time()
     model = pipeline.fit(train_df)
     end_time = time.time()
-    print(f"GPU Training time: {end_time - start_time:.2f} seconds")
+    print(f"[GPU Train] time: {end_time - start_time:.2f} seconds")
 
     start_time1 = time.time()
     preds = model.transform(test_df)
     end_time1 = time.time()
-    print(f"GPU Infering time: {end_time1 - start_time1:.2f} seconds")
+    print(f"[GPU Infer] time: {end_time1 - start_time1:.2f} seconds")
 
-    evaluator = RegressionEvaluator(labelCol=LABEL, predictionCol="prediction")
+    evaluator = RegressionEvaluator(labelCol=LABEL, predictionCol="prediction", metricName="rmse")
+    evaluator_mae  = RegressionEvaluator(labelCol=LABEL, predictionCol="prediction", metricName="mae")
+    evaluator_r2   = RegressionEvaluator(labelCol=LABEL, predictionCol="prediction", metricName="r2")
 
-    rmse = evaluator.evaluate(preds, {evaluator.metricName: "rmse"})
-    mae  = evaluator.evaluate(preds, {evaluator.metricName: "mae"})
-    r2   = evaluator.evaluate(preds, {evaluator.metricName: "r2"})
+    ### ===== Train metrics =====
+    train_preds = final_model.transform(train_df)
+    train_rmse = evaluator.evaluate(train_preds)
+    train_mae  = evaluator_mae.evaluate(train_preds)
+    train_r2   = evaluator_r2.evaluate(train_preds)
+    print(f"[GPU Train] RMSE: {train_rmse:.4f}, MAE: {train_mae:.4f}, R2: {train_r2:.4f}")
 
-    print(f"GPU: RMSE: {rmse:.4f}, MAE: {mae:.4f}, R2: {r2:.4f}")
+    ### ===== Test metrics =====
+    preds = final_model.transform(test_df)
+    test_rmse = evaluator.evaluate(preds)
+    test_mae  = evaluator_mae.evaluate(preds)
+    test_r2   = evaluator_r2.evaluate(preds)
+    print(f"[GPU Test] RMSE: {test_rmse:.4f}, MAE: {test_mae:.4f}, R2: {test_r2:.4f}")
 
 
 if __name__ == "__main__":

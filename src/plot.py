@@ -46,15 +46,15 @@ def plot_pred_vs_actual(preds_df, label_col, model_name, bucket_name):
     gcs_path = f"figures/{local_path}"
     save_and_upload_fig(fig, local_path, bucket_name, gcs_path)
 
-def plot_time_series(preds_df, test_df, label_col, time_col, model_name, bucket_name):
+def plot_time_series(pred_df, label_col, time_col, model_name, bucket_name):
     """时间序列折线图"""
-    if time_col not in test_df.columns:
+
+    if time_col not in pred_df.columns:
         return
-    time_pd = test_df.select(time_col).toPandas()
-    pred_pd = preds_df.select(label_col, "prediction").toPandas()
+    pred_pd = pred_df.select(time_col, label_col, "prediction").toPandas()
     fig, ax = plt.subplots()
-    ax.plot(time_pd[time_col], pred_pd[label_col], label="Actual")
-    ax.plot(time_pd[time_col], pred_pd["prediction"], label="Predicted")
+    ax.plot(pred_pd[time_col], pred_pd[label_col], label="Actual")
+    ax.plot(pred_pd[time_col], pred_pd["prediction"], label="Predicted")
     ax.set_xlabel("Time")
     ax.set_ylabel(label_col)
     ax.set_title(f"{model_name.upper()} Actual vs Predicted over Time")
@@ -82,7 +82,7 @@ def plot_feature_importances(model_stage, numeric_features, model_name, bucket_n
     save_and_upload_fig(fig, local_path, bucket_name, gcs_path)
 
 def plot_loss_curve(model_stage, model_name, bucket_name):
-    """GBT 或 Elastic Net 的训练 loss 曲线"""
+    """Elastic Net Training loss curve"""
     if hasattr(model_stage, "summary") and model_stage.summary is not None:
         try:
             loss_history = model_stage.summary.loss

@@ -65,12 +65,10 @@ def main():
 
     if args.model == "rf":
         param_grid = [
-        {"numTrees": 80,  "maxDepth": 8,  "subsamplingRate": 0.8},
-        # {"numTrees":160,  "maxDepth": 8,  "subsamplingRate": 0.8},
-        # {"numTrees":120,  "maxDepth":10, "subsamplingRate": 0.9},
-        # {"numTrees":240,  "maxDepth":10, "subsamplingRate": 0.9},
-        # {"numTrees":200,  "maxDepth":14, "subsamplingRate": 1.0},
-        # {"numTrees":320,  "maxDepth":14, "subsamplingRate": 1.0},
+        {"numTrees": 20,  "maxDepth": 5,  "subsamplingRate": 0.8},
+        {"numTrees":60,  "maxDepth": 6,  "subsamplingRate": 0.8},
+        {"numTrees":80,  "maxDepth":7, "subsamplingRate": 0.9},
+        {"numTrees":100,  "maxDepth":8, "subsamplingRate": 0.9}
         ]
         estimator_builder = lambda **p: RandomForestRegressor(labelCol=LABEL, featuresCol="features", seed=42, **p)
     elif args.model == "gbrt":
@@ -82,10 +80,11 @@ def main():
     ]
         estimator_builder = lambda **p: GBTRegressor(labelCol=LABEL, featuresCol="features", seed=42, **p)
     elif args.model == "elastic":
-        param_grid = [
-            {"regParam": 0.01, "elasticNetParam": 0.0, "maxIter": 200},
-            #{"regParam": 0.1,  "elasticNetParam": 0.5, "maxIter": 200},
-            #{"regParam": 0.2,  "elasticNetParam": 0.9, "maxIter": 300},
+        param_grid = [ 
+            {"regParam": 0.00025, "elasticNetParam": 0.1, "maxIter": 300},
+            {"regParam": 0.01,  "elasticNetParam": 0.5, "maxIter": 400},
+            {"regParam": 0.03,  "elasticNetParam": 0.8, "maxIter": 400},
+            {"regParam": 0.08,  "elasticNetParam": 1.0, "maxIter": 500},
         ]
         estimator_builder = lambda **p: LinearRegression(
             labelCol=LABEL,
@@ -122,22 +121,22 @@ def main():
     print(f"Test RMSE: {test_rmse:.4f}, MAE: {test_mae:.4f}, R2: {test_r2:.4f}")
 
 
-    # 残差图
-    plot.plot_residuals(preds, LABEL, args.model, args.bucket)
+    # # 残差图
+    # plot.plot_residuals(preds, LABEL, args.model, args.bucket)
 
-    # 散点图
-    plot.plot_pred_vs_actual(preds, LABEL, args.model, args.bucket)
+    # # 散点图
+    # plot.plot_pred_vs_actual(preds, LABEL, args.model, args.bucket)
 
-    # 时间序列图
-    plot.plot_time_series(preds, test_df, LABEL, TIMESTAMP_COL, args.model, args.bucket)
+    # # 时间序列图
+    # plot.plot_time_series(preds, test_df, LABEL, TIMESTAMP_COL, args.model, args.bucket)
 
-    # 特征重要性
-    if args.model in ["rf", "gbrt"]:
-        plot.plot_feature_importances(final_model.stages[-1], numeric_features, args.model, args.bucket)
+    # # 特征重要性
+    # if args.model in ["rf", "gbrt"]:
+    #     plot.plot_feature_importances(final_model.stages[-1], numeric_features, args.model, args.bucket)
 
-    # Loss curve
-    if args.model in ["gbrt", "elastic"]:
-        plot.plot_loss_curve(final_model.stages[-1], args.model, args.bucket)
+    # # Loss curve
+    # if args.model in ["gbrt", "elastic"]:
+    #     plot.plot_loss_curve(final_model.stages[-1], args.model, args.bucket)
 
 
     from google.cloud import storage

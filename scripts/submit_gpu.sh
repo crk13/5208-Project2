@@ -1,4 +1,7 @@
 #!/bin/bash
+# Usage:
+# chmod +x ./scripts/submit_gpu.sh
+# ./scripts/submit_gpu.sh gbrt
 
 set -e
 
