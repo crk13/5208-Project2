@@ -29,8 +29,8 @@ gcloud dataproc jobs submit pyspark test/visualize.py \
     --region=asia-southeast1 \
     --py-files=src.zip \
     -- \
-    --train-path="gs://spark-result/train_withds/" \
-    --test-path="gs://spark-result/test_withds/" \
+    --train-path="gs://spark-result-lyx/train_withds/" \
+    --test-path="gs://spark-result-lyx/test_withds/" \
     --sample-fraction=0.001 \
     --num-folds=4 \
     --bucket="spark-result"

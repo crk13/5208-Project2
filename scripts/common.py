@@ -5,8 +5,8 @@ from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler, MinMaxScaler
 
 DEFAULT_DATASET_PATH = os.environ.get("DATASET_PATH", "../spark-result/clean")
-DEFAULT_TRAIN_PATH = os.environ.get("TRAIN_DATA_PATH", "gs://spark-result/train_withds")
-DEFAULT_TEST_PATH = os.environ.get("TEST_DATA_PATH", "gs://spark-result/test_withds")
+DEFAULT_TRAIN_PATH = os.environ.get("TRAIN_DATA_PATH", "gs://spark-result-lyx/train_withds")
+DEFAULT_TEST_PATH = os.environ.get("TEST_DATA_PATH", "gs://spark-result-lyx/test_withds")
 
 
 def create_spark(app_name="WeatherForecast"):

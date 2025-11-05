@@ -7,6 +7,7 @@ from pyspark.ml.regression import RandomForestRegressor, GBTRegressor, LinearReg
 from pyspark.ml.evaluation import RegressionEvaluator
 
 import sys, os, time
+from pathlib import Path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.time_cv import prefix_folds
 from src.model_selection import grid_search_prefix_cv
@@ -81,9 +82,19 @@ def main():
         estimator_builder = lambda **p: GBTRegressor(labelCol=LABEL, featuresCol="features", seed=42, **p)
     elif args.model == "elastic":
         param_grid = [
-            {"regParam": 0.01, "elasticNetParam": 0.0, "maxIter": 200},
-            #{"regParam": 0.1,  "elasticNetParam": 0.5, "maxIter": 200},
-            #{"regParam": 0.2,  "elasticNetParam": 0.9, "maxIter": 300},
+            # First Try
+            # {"regParam": 0.00025, "elasticNetParam": 0.1, "maxIter": 300},
+            # {"regParam": 0.01,  "elasticNetParam": 0.5, "maxIter": 400},
+            # {"regParam": 0.03,  "elasticNetParam": 0.8, "maxIter": 400},
+            # {"regParam": 0.08, "elasticNetParam": 1.0, "maxIter": 500},
+            # Second Try
+            {"regParam": 0.00015, "elasticNetParam": 0.08, "maxIter": 80,  "tol": 1e-6},
+            # {"regParam": 0.00025, "elasticNetParam": 0.10, "maxIter": 80,  "tol": 1e-6},
+            # {"regParam": 0.00040, "elasticNetParam": 0.15, "maxIter": 100, "tol": 1e-6},
+            # Third Try
+            {"regParam": 0.00018, "elasticNetParam": 0.09, "maxIter": 160,  "tol": 5e-7},
+            {"regParam": 0.00012, "elasticNetParam": 0.07, "maxIter": 120,  "tol": 1e-6},
+            {"regParam": 0.0003,"elasticNetParam": 0.12, "maxIter": 200, "tol": 1e-6},
         ]
         estimator_builder = lambda **p: LinearRegression(
             labelCol=LABEL,
@@ -108,6 +119,14 @@ def main():
     final_model = final_pipeline.fit(train_df)
     end_time = time.time()
     print(f"Training time: {end_time - start_time:.2f} seconds")
+
+    if args.model == "elastic":
+        lin_stage = final_model.stages[-1]
+        if hasattr(lin_stage, "coefficients"):
+            print("Elastic Net coefficients (scaled feature space):")
+            for feature_name, coef in zip(numeric_features, lin_stage.coefficients.toArray()):
+                print(f"  {feature_name}: {coef}")
+            print(f"Intercept: {lin_stage.intercept}")
 
     start_time = time.time()
     preds = final_model.transform(test_df)
@@ -140,20 +159,22 @@ def main():
 
 
     from google.cloud import storage
-    import os
 
-    local_model_path = f"models/{args.model}_model"
-    final_model.write().overwrite().save(local_model_path)
+    local_model_path = Path("models") / f"{args.model}_model"
+    local_model_path.parent.mkdir(parents=True, exist_ok=True)
+    final_model.write().overwrite().save(f"file://{local_model_path.resolve()}")
+    print(f"Model saved locally at {local_model_path.resolve()}")
+
     gcs_model_path = f"models/{args.model}_model"
 
     client = storage.Client()
     bucket = client.bucket(args.bucket)
     for root, dirs, files in os.walk(local_model_path):
         for file in files:
-            local_file = os.path.join(root, file)
+            local_file = Path(root) / file
             relative_path = os.path.relpath(local_file, local_model_path)
             blob = bucket.blob(f"{gcs_model_path}/{relative_path}")
-            blob.upload_from_filename(local_file)
+            blob.upload_from_filename(str(local_file))
 
     print(f"Model uploaded to gs://{args.bucket}/{gcs_model_path}")
     print(f"Model !")
