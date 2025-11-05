@@ -75,9 +75,11 @@ def main():
         estimator_builder = lambda **p: RandomForestRegressor(labelCol=LABEL, featuresCol="features", seed=42, **p)
     elif args.model == "gbrt":
         param_grid = [
-            {"maxDepth":5, "maxIter":80, "stepSize":0.1, "maxBins":32, "subsamplingRate":1.0, "minInstancesPerNode":5},
-            {"maxDepth":7, "maxIter":120, "stepSize":0.1, "maxBins":64, "subsamplingRate":0.8, "minInstancesPerNode":5},
-        ]
+        {"maxDepth": 4, "maxIter": 70,  "stepSize": 0.2, "subsamplingRate": 1.0, "minInstancesPerNode": 5},
+        {"maxDepth": 4, "maxIter": 50,  "stepSize": 0.15,  "subsamplingRate": 0.9, "minInstancesPerNode": 5},
+        {"maxDepth": 5, "maxIter": 60,  "stepSize": 0.2,  "subsamplingRate": 0.9, "minInstancesPerNode": 5},
+        {"maxDepth": 6, "maxIter": 50,  "stepSize": 0.1, "subsamplingRate": 0.8, "minInstancesPerNode": 5},
+    ]
         estimator_builder = lambda **p: GBTRegressor(labelCol=LABEL, featuresCol="features", seed=42, **p)
     elif args.model == "elastic":
         param_grid = [
@@ -96,7 +98,6 @@ def main():
 
 
     best_params, grid_results = grid_search_prefix_cv(folds, base_stages, estimator_builder, param_grid, evaluator)
-    print("best params: ", best_params)
     spark.createDataFrame(
         [(str(params), score) for params, score in grid_results],
         ["params", "avg_rmse"],

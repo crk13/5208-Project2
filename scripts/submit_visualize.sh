@@ -7,7 +7,7 @@ REGION="asia-southeast1"
 
 # NUM_WORKERS=2
 # MASTER_DISK=100
-# WORKER_DISK=100
+# WORKER_DISK=10
 
 
 # gcloud dataproc clusters create $CLUSTER_NAME \

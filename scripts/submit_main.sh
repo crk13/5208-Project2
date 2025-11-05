@@ -1,15 +1,12 @@
 #!/bin/bash
-# 用法:
+# Usage:
 # chmod +x submit_main.sh
-# ./submit_main.sh rf   # 训练 RandomForest
-# ./submit_main.sh gbrt # 训练 GBT
+# ./scripts/submit_main.sh rf   # train RandomForest
+# ./scripts/submit_main.sh gbrt # train GBT
 
 set -e
 
-# ---------------------------
-# 配置
-# ---------------------------
-MODEL="$1"  # 第一个参数，rf、gbrt 或 elastic
+MODEL="$1"  # First Param: rf, gbrt or elastic
 if [[ -z "$MODEL" || ! "$MODEL" =~ ^(rf|gbrt|elastic)$ ]]; then
   echo "Usage: $0 <rf|gbrt|elastic>"
   exit 1
@@ -53,7 +50,7 @@ gcloud dataproc jobs submit pyspark \
   --test-path $TESTSET_PATH \
   --sample-fraction=0.001 \
   --num-folds 4 \
-  --bucket="spark-resulttt" \
+  --bucket=$BUCKET2 \
   > >(tee /tmp/job_${MODEL}.log) 2>&1
 
 gsutil cp /tmp/job_${MODEL}.log "$LOG_PATH"
@@ -61,9 +58,8 @@ echo "Logs saved to: $LOG_PATH"
 
 MODEL="$1"
 LOCAL_PATH="models/${MODEL}_model"
-BUCKET="your-bucket-name"
 
-gsutil -m cp -r $LOCAL_PATH gs://$BUCKET/models/
+gsutil -m cp -r $LOCAL_PATH gs://$BUCKET2/models/
 
 
 gcloud dataproc clusters delete $CLUSTER_NAME --region=$REGION --quiet
