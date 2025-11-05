@@ -1,15 +1,15 @@
 #!/bin/bash
-# 用法:
+# Usage:
 # chmod +x submit_main.sh
-# ./submit_main.sh rf   # 训练 RandomForest
-# ./submit_main.sh gbrt # 训练 GBT
+# ./submit_main.sh rf   # train RandomForest
+# ./submit_main.sh gbrt # train GBT
 
 set -e
 
 # ---------------------------
-# 配置
+# Configuration
 # ---------------------------
-MODEL="$1"  # 第一个参数，rf、gbrt 或 elastic
+MODEL="$1"  # First argument: rf, gbrt, or elastic
 if [[ -z "$MODEL" || ! "$MODEL" =~ ^(rf|gbrt|elastic)$ ]]; then
   echo "Usage: $0 <rf|gbrt|elastic>"
   exit 1

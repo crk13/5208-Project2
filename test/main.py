@@ -42,7 +42,7 @@ def main():
 
     train_sorted = train_df.orderBy(TIMESTAMP_COL)
     total_rows = train_sorted.count()
-    # 按 fraction 等距抽
+    # Sample evenly spaced rows based on the requested fraction
     step = int(1 / args.sample_fraction)
 
     train_sample = train_sorted.rdd.zipWithIndex() \
@@ -114,7 +114,7 @@ def main():
         ).show(truncate=False)
 
     final_pipeline = Pipeline(stages=base_stages + [estimator_builder(**best_params)])
-    # 训练前记录时间
+    # Record training time
     start_time = time.time()
     final_model = final_pipeline.fit(train_df)
     end_time = time.time()
@@ -140,16 +140,16 @@ def main():
     print(f"Test RMSE: {test_rmse:.4f}, MAE: {test_mae:.4f}, R2: {test_r2:.4f}")
 
 
-    # 残差图
+    # Residual plot
     plot.plot_residuals(preds, LABEL, args.model, args.bucket)
 
-    # 散点图
+    # Scatter plot
     plot.plot_pred_vs_actual(preds, LABEL, args.model, args.bucket)
 
-    # 时间序列图
+    # Time-series plot
     plot.plot_time_series(preds, test_df, LABEL, TIMESTAMP_COL, args.model, args.bucket)
 
-    # 特征重要性
+    # Feature importance plot
     if args.model in ["rf", "gbrt"]:
         plot.plot_feature_importances(final_model.stages[-1], numeric_features, args.model, args.bucket)
 

@@ -31,7 +31,7 @@ print("Step 0: Total rows read:", df.count())
 # ---------
 # Step 1: Delete stations with too few rows
 # ---------
-station_record_counts = df.groupBy("STATION").count().persist() # 对 station 做计数并缓存
+station_record_counts = df.groupBy("STATION").count().persist()  # Count rows per station and cache the result
 
 counts = station_record_counts.select("count").rdd.map(lambda r: r[0]).collect()
 local_path = "/tmp/station_record_hist.png"
@@ -124,7 +124,7 @@ print("Step 3: Before anomaly filter, anomaly summary: ")
 abnormal_counts.show(truncate=False)
 
 
-# 替换异常值为 null
+# Replace sentinel values with null
 df_filtered = (
     df_filtered.withColumn("TMP", F.expr("CASE WHEN TMP = 999.9 THEN NULL ELSE TMP END"))
       .withColumn("DEW", F.expr("CASE WHEN DEW = 999.9 THEN NULL ELSE DEW END"))
@@ -137,7 +137,7 @@ df_filtered = (
       .withColumn("LONGITUDE", F.expr("CASE WHEN abs(LONGITUDE) = 999.999 THEN NULL ELSE LONGITUDE END"))
 )
 
-# 删除六个主要特征列都为 null 的行
+# Drop rows where all major weather features are null
 df_filtered = df_filtered.filter(
     ~(F.col("TMP").isNull() |
       F.col("DEW").isNull() &
@@ -149,15 +149,15 @@ df_filtered = df_filtered.filter(
      )
 )
 
-#查看剩余行数
+# Inspect the remaining row count
 print("Remaining rows after cleaning:", df_filtered.count())
 
 
-# 查看筛选后各列的缺失值情况
+# Inspect null counts after filtering
 abnormal_counts = df_filtered.select([F.sum(F.col(c).isNull().cast("int")).alias(c) for c in df_filtered.columns])
 abnormal_counts.show()
 
-#统计各列缺失值占比
+# Summarize null percentages for each column
 total_count = df_filtered.count()
 abnormal_counts = df_filtered.select([((F.sum(F.col(c).isNull().cast("int")) / total_count) * 100).alias(c) for c in df_filtered.columns])
 abnormal_counts.show()

@@ -6,7 +6,7 @@ import numpy as np
 from google.cloud import storage
 
 def save_and_upload_fig(fig, local_path, bucket_name, gcs_path):
-    """保存图并上传到GCS"""
+    """Save the figure locally and upload it to GCS."""
     fig.savefig(local_path, bbox_inches='tight')
     client = storage.Client()
     bucket = client.bucket(bucket_name)
@@ -16,7 +16,7 @@ def save_and_upload_fig(fig, local_path, bucket_name, gcs_path):
     plt.close(fig)
 
 def plot_residuals(preds_df, label_col, model_name, bucket_name):
-    """残差图"""
+    """Plot residuals and log summary statistics."""
     pred_pd = preds_df.select(label_col, "prediction").toPandas()
     residuals = pred_pd[label_col] - pred_pd["prediction"]
     summary = residuals.describe()
@@ -33,10 +33,10 @@ def plot_residuals(preds_df, label_col, model_name, bucket_name):
     save_and_upload_fig(fig, local_path, bucket_name, gcs_path)
 
 def plot_pred_vs_actual(preds_df, label_col, model_name, bucket_name):
-    """散点图与时间序列图"""
+    """Scatter plot comparing predictions to ground truth."""
     pred_pd = preds_df.select(label_col, "prediction").toPandas()
 
-    # 散点图
+    # Scatter plot
     fig, ax = plt.subplots()
     ax.scatter(pred_pd[label_col], pred_pd["prediction"], alpha=0.5)
     ax.plot([pred_pd[label_col].min(), pred_pd[label_col].max()],
@@ -50,7 +50,7 @@ def plot_pred_vs_actual(preds_df, label_col, model_name, bucket_name):
     save_and_upload_fig(fig, local_path, bucket_name, gcs_path)
 
 def plot_time_series(pred_df, label_col, time_col, model_name, bucket_name):
-    """时间序列折线图"""
+    """Plot actual versus predicted values across time."""
 
     if time_col not in pred_df.columns:
         return
@@ -67,10 +67,10 @@ def plot_time_series(pred_df, label_col, time_col, model_name, bucket_name):
     save_and_upload_fig(fig, local_path, bucket_name, gcs_path)
 
 def plot_feature_importances(model_stage, numeric_features, model_name, bucket_name):
-    """树模型的特征重要性"""
+    """Visualize feature importances for tree-based models."""
     if not hasattr(model_stage, "featureImportances"):
         return
-    # 转 numpy
+    # Convert to numpy for sorting
     feature_importances = np.array(model_stage.featureImportances)
     fig, ax = plt.subplots(figsize=(10,6))
     indices = np.argsort(feature_importances)[::-1]
@@ -89,7 +89,7 @@ def plot_feature_importances(model_stage, numeric_features, model_name, bucket_n
     save_and_upload_fig(fig, local_path, bucket_name, gcs_path)
 
 def plot_loss_curve(model_stage, model_name, bucket_name):
-    """GBT 或 Elastic Net 的训练 loss 曲线"""
+    """Plot the training loss curve for GBT or Elastic Net models."""
     if hasattr(model_stage, "summary") and model_stage.summary is not None:
         try:
             loss_history = model_stage.summary.loss

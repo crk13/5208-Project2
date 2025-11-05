@@ -41,7 +41,7 @@ def main():
 
     train_sorted = train_df.orderBy(TIMESTAMP_COL)
     total_rows = train_sorted.count()
-    # 按 fraction 等距抽
+    # Sample evenly spaced rows based on the requested fraction
     step = int(1 / args.sample_fraction)
 
     train_sample = train_sorted.rdd.zipWithIndex() \
@@ -61,7 +61,7 @@ def main():
     # scaler = StandardScaler(inputCol="features_raw", outputCol="features", withMean=True, withStd=True)
     base_stages = [assembler, scaler]
 
-    # 定义模型和参数网格
+    # Define models and parameter ranges
     models = {
         "gbrt": lambda **p: GBTRegressor(labelCol=LABEL, featuresCol="features", seed=42, **p),
         # "rf": lambda **p: RandomForestRegressor(labelCol=LABEL, featuresCol="features", seed=42, **p),
@@ -86,7 +86,7 @@ def main():
                 "elasticNetParam":[0.0,0.2, 0.5, 0.7, 1.0]}
     }
 
-    # 对每个模型进行单参数扫描 + 可视化
+    # Run a one-parameter scan for each model and visualize the results
     for model_name, estimator_builder in models.items():
         print(f"=== Processing {model_name} ===")
         for param_name, param_values in param_grids[model_name].items():

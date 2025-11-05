@@ -4,7 +4,9 @@ from pyspark.sql import types as T
 
 def prefix_folds(train_df, timestamp_col, num_folds=4):
     """
-    通过时间戳排序再使用 zipWithIndex 分配全局递增索引，避免无分区的 Window 计算。
+    Create prefix-style folds by ordering on the timestamp and assigning a
+    global index via zipWithIndex, which avoids an unpartitioned window
+    operation.
     """
     sorted_df = train_df.orderBy(timestamp_col).cache()
     indexed_rdd = sorted_df.rdd.zipWithIndex().map(

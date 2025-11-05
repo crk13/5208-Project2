@@ -46,7 +46,7 @@ plt.tight_layout()
 plt.savefig(local_path1)
 plt.close()
 
-# 上传到 GCS
+# Upload plots to GCS
 from google.cloud import storage
 client = storage.Client()
 bucket = client.bucket("spark-result")
@@ -163,20 +163,20 @@ partition_cols = ["STATION"]
 time_col = "DATE_TS"
 
 for c in cols_to_interp:
-    # 定义窗口：同一组内按时间排序
+    # Define a window ordered by time within each station
     base_w = Window.partitionBy(*partition_cols).orderBy(time_col)
 
-    # 各点最近的“前一个”非空取值及时间
+    # Most recent non-null value and timestamp before the current row
     prev_w = base_w.rowsBetween(Window.unboundedPreceding, 0)
     prev_val = F.last(c, ignorenulls=True).over(prev_w)
     prev_ts = F.last(F.when(F.col(c).isNotNull(), F.col(time_col)), ignorenulls=True).over(prev_w)
 
-    # 各点最近的“后一个”非空取值及时间
+    # Next non-null value and timestamp after the current row
     next_w = base_w.rowsBetween(0, Window.unboundedFollowing)
     next_val = F.first(c, ignorenulls=True).over(next_w)
     next_ts = F.first(F.when(F.col(c).isNotNull(), F.col(time_col)), ignorenulls=True).over(next_w)
 
-    # 时间差（秒）
+    # Time deltas in seconds
     total_dt = next_ts.cast("long") - prev_ts.cast("long")
     curr_dt = F.col(time_col).cast("long") - prev_ts.cast("long")
 
@@ -189,7 +189,7 @@ for c in cols_to_interp:
             (total_dt != 0),
             prev_val + (next_val - prev_val) * curr_dt / total_dt
         )
-        .when(F.col(c).isNull(), prev_val)  # 如果只有前向值可用，就做 forward fill
+        .when(F.col(c).isNull(), prev_val)  # Fallback to forward fill when only the previous value exists
         .otherwise(F.col(c))
     )
 
@@ -234,7 +234,7 @@ df_filtered.write.mode("overwrite").option("header", True).csv(os.path.join(outp
 # ---------
 periodic_cols = ["WND_sin", "WND_cos"]
 
-# 0) 预先缓存主数据，避免重复扫描；同时触发一次 action
+# 0) Cache the dataset to avoid repeated scans and trigger a single action
 df_filtered = (
     df_filtered
     .repartition("STATION")
@@ -242,7 +242,7 @@ df_filtered = (
 )
 df_filtered.count()
 
-# 1) 找出缺失率很低的站点，直接跳过 UDF
+# 1) Skip the UDF for stations that have an extremely low missing ratio
 null_stats = (
     df_filtered
     .select("STATION", *periodic_cols)
@@ -266,14 +266,14 @@ null_stats = null_stats.withColumn(
 
 stations_to_interp = (
     null_stats
-    .filter(F.col("null_ratio") >= F.lit(0.001))  # 0.1% 以上缺失才进入 UDF
+    .filter(F.col("null_ratio") >= F.lit(0.001))  # Only run the UDF when at least 0.1% of values are missing
     .select("STATION")
 )
 
 df_interp = df_filtered.join(stations_to_interp, on="STATION", how="inner")
 df_skip = df_filtered.join(stations_to_interp, on="STATION", how="leftanti")
 
-# 2) 定义自适应窗口 + 降 TOP_K 的傅立叶插值
+# 2) Apply adaptive-window Fourier interpolation with a capped TOP_K
 schema = StructType([
     StructField("STATION", StringType(), False),
     StructField("DATE_TS", TimestampType(), False),
@@ -361,7 +361,7 @@ df_filtered = (
               .persist(StorageLevel.MEMORY_AND_DISK)
 )
 
-print("Step 7: After Fourier interp, num of rows:", df_filtered.count())  # 触发缓存，也验证最终行数
+print("Step 7: After Fourier interp, num of rows:", df_filtered.count())  # Re-triggers the cache and validates the row count
 df_filtered.write.mode("overwrite").option("header", True).csv(os.path.join(output_bucket, "filtered_fourier7"))
 
 
@@ -379,4 +379,3 @@ print("Train count:", train_df.count(), "Test count:", test_df.count())
 train_df.write.mode("overwrite").option("header", True).csv(os.path.join(output_bucket, "train"))
 test_df.write.mode("overwrite").option("header", True).csv(os.path.join(output_bucket, "test"))
 print("All steps completed. CSVs saved to", output_bucket)
-

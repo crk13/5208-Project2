@@ -42,7 +42,7 @@ def main():
 
     train_sorted = train_df.orderBy(TIMESTAMP_COL)
     total_rows = train_sorted.count()
-    # 按 fraction 等距抽
+    # Sample evenly spaced rows based on the requested fraction
     step = int(1 / args.sample_fraction)
 
     train_sample = train_sorted.rdd.zipWithIndex() \
@@ -99,7 +99,7 @@ def main():
     best_params, grid_results = grid_search_prefix_cv(folds, base_stages, estimator_builder, param_grid, evaluator)
     print("best params: ", best_params)
     final_pipeline = Pipeline(stages=base_stages + [estimator_builder(**best_params)])
-    # 训练前记录时间
+    # Record training time
     start_time = time.time()
     final_model = final_pipeline.fit(train_df)
     end_time = time.time()
